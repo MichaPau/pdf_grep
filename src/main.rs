@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 //#![allow(unused_imports)]
 
+//use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
@@ -19,13 +20,19 @@ use clap::{Parser, Subcommand};
 // mod xpdf_tools;
 mod grep_utils;
 mod utils;
+mod settings;
+
 // mod parse_utils;
 // mod types;
 
+use settings::{PDFTools, XpdfWrapper};
 //use xpdf_tools::xpdf_text;
 use xpdf_tools::types::XpdfArgs;
-use xpdf_tools::XpdfTools;
+//use xpdf_tools::xpdf_info::PdfInfo;
+use xpdf_tools::{PdfError, XpdfTools};
 use xpdf_tools::{self};
+
+use crate::settings::{PdfTestTools, Settings};
 
 
 
@@ -59,6 +66,8 @@ type BoxError = std::boxed::Box<dyn
 	+ std::marker::Sync // needed for threads
 >;
 
+
+
 fn _write_to_file(file_path: &str, content: &String) {
     let p = Path::new(file_path);
     let mut file = std::fs::File::create(p).unwrap();
@@ -85,11 +94,15 @@ fn get_info_dir(dir_path: &Path) {
     println!("info for: {:?}", dir_path);
 }
 
-fn search_invoke(dir: &str, list: &Vec<String>, pattern: &String, tools: &XpdfTools) {
+fn search_invoke(_dir: &str, list: &Vec<String>, pattern: &String, tools: &dyn PDFTools) {
     // let tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
     // .build();
 
-    let mut settings = grep_utils::Settings::default();
+    // let mut settings = settings::Settings {
+    //     tools: Box::new(XpdfWrapper {tools}), 
+    //     ..Default::default()
+    // };
+    let mut settings = settings::Settings::default();
 
     //let mut output = std::io::stdout();
     //writeln!(settings.stream, "Searching folder {dir}").unwrap();
@@ -100,46 +113,58 @@ fn search_invoke(dir: &str, list: &Vec<String>, pattern: &String, tools: &XpdfTo
                 grep_utils::search_file(&content, pattern, &mut settings, &p).unwrap();
             },
             Err(e) => {
-                io::stderr().write(e.message.as_bytes()).unwrap();
-                io::stderr().write(b"\n").unwrap();
-                io::stderr().write(e.process_message.as_bytes()).unwrap();
+                if let Some(pdf_error) = e.downcast_ref::<PdfError>() {
+                    io::stderr().write(pdf_error.message.as_bytes()).unwrap();
+                    io::stderr().write(b"\n").unwrap();
+                    io::stderr().write(pdf_error.process_message.as_bytes()).unwrap();
+                    
+                } else {
+                    io::stderr().write(e.to_string().as_bytes()).unwrap();
+                }
                 io::stderr().flush().unwrap();
             },
         }
     }
 }
-fn search_dir(dir_path: &Path, pattern: &String) {
+fn search_dir(dir_path: &Path, pattern: &String, settings: &mut Settings) {
    
-    let tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
-    .build();
+    // let tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
+    // .build();
     //println!("{dir_path:?} - {pattern}");
     let pdf_map = utils::get_folder_tree(dir_path);
 
     
 
     pdf_map.par_iter().for_each(|(dir, list)| {
-        search_invoke(dir, list, pattern, &tools);
+        //search_invoke(dir, list, pattern, &tools);
+        search_invoke(dir, list, pattern, &*settings.tools);
         
     });
     //utils::_dump(&pdf_map);
 
 }
 
-fn search_file(file_path: &Path, pattern: &String) {
+fn search_file(file_path: &Path, pattern: &String, settings: &mut Settings) {
     //let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    let mut settings = grep_utils::Settings::default();
-    let tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
-        .extra_args(vec![XpdfArgs::Encoding("UTF-8".into())])
-        .build();
+    //let mut settings = settings::Settings::default();
+    
+    // let tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
+    //     .extra_args(vec![XpdfArgs::Encoding("UTF-8".into())])
+    //     .build();
 
-    match tools.pdf_text(file_path) {
+    match settings.tools.pdf_text(file_path) {
         Ok(content) => {
-            grep_utils::search_file(&content, pattern, &mut settings, file_path).unwrap();
+            grep_utils::search_file(&content, pattern, settings, file_path).unwrap();
         },
         Err(e) => {
-            io::stderr().write(e.message.as_bytes()).unwrap();
-            io::stderr().write(b"\n").unwrap();
-            io::stderr().write(e.process_message.as_bytes()).unwrap();
+            if let Some(pdf_error) = e.downcast_ref::<PdfError>() {
+                io::stderr().write(pdf_error.message.as_bytes()).unwrap();
+                io::stderr().write(b"\n").unwrap();
+                io::stderr().write(pdf_error.process_message.as_bytes()).unwrap();
+                
+            } else {
+                io::stderr().write(e.to_string().as_bytes()).unwrap();
+            }
             io::stderr().flush().unwrap();
         },
     }
@@ -154,6 +179,12 @@ fn search_file(file_path: &Path, pattern: &String) {
 fn main() -> Result<(), BoxError>{
     env::set_var("RUST_BACKTRACE", "1");
     println!("{}", xpdf_tools::get_version());
+
+    let mut settings = Settings::default();
+    let _tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
+                    .extra_args(vec![XpdfArgs::Simple, XpdfArgs::Encoding("UTF-8".into())])
+                    .build();    
+
     let cli = Cli::parse();
 
     match cli.command { 
@@ -167,9 +198,13 @@ fn main() -> Result<(), BoxError>{
         Actions::Test => { println!("Action: test");},
         Actions::Search {ref pattern}=> {
             if let Some(dir) = cli.directory.as_deref() {
-                search_dir(dir, pattern);
+                settings.tools = Box::new(XpdfWrapper {tools: _tools});
+                search_dir(dir, pattern, &mut settings);
             } else if let Some(file) = cli.file.as_deref() {
-                search_file(&file, pattern);
+                
+                //settings.tools = Box::new(XpdfWrapper {tools});
+                settings.tools = Box::new(PdfTestTools {});
+                search_file(&file, pattern, &mut settings);
             } 
             //println!("Action: search:{}", *pattern);
         },

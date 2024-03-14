@@ -1,83 +1,16 @@
 
 use {
    
-    //grep::matcher::Matcher,
-    grep::regex::RegexMatcher,
-    grep::searcher::{Searcher, BinaryDetection, SearcherBuilder},
-    grep::searcher::sinks::UTF8,
+    crate::settings::Settings, 
+    grep::{regex::RegexMatcher, searcher::{sinks::UTF8, Searcher}}
  
-    
 };
-
-use termcolor::{ColorChoice, WriteColor};
-//use std::path::Path;
+use termcolor::WriteColor;
 use std::io::Write;
-use std::io::IsTerminal;
 use std::path::Path;
-//use termcolor_output::colored;
-use termcolor::{Color, StandardStream, ColorSpec};
-//use crate::xpdf_tools;
-
 
 
 //https://github.com/BurntSushi/ripgrep
-pub struct Settings {
-    pub stream: StandardStream,
-    pub color_specs: SearchColorSpecs,
-    pub searcher: Searcher,
-    
-}
-impl Default for Settings {
-    fn default() -> Self {
-        let color_choice = if std::io::stdin().is_terminal() { ColorChoice::Auto} else { ColorChoice::Never};
-        let stream = StandardStream::stdout(color_choice);
-
-        let searcher = SearcherBuilder::new()
-            .binary_detection(BinaryDetection::quit(b'\x00'))
-            .multi_line(false)
-            .line_number(true)
-            .build();
-
-        Settings {
-            stream,
-            color_specs: SearchColorSpecs::default(),
-            searcher
-        }
-        
-    }
-}
-pub struct SearchColorSpecs {
-    pub match_spec: ColorSpec,
-    pub text_spec: ColorSpec,
-    pub info_spec: ColorSpec,
-    pub extra_spec: ColorSpec,
-}
-
-
-impl Default for SearchColorSpecs {
-    fn default() -> Self {
-        let mut m_spec = ColorSpec::new();
-        m_spec.set_fg(Some(Color::Rgb(255, 197, 12)));
-        m_spec.set_bold(true);
-        m_spec.set_underline(true);
-
-        let mut t_spec = ColorSpec::new();
-        t_spec.set_fg(Some(Color::Rgb(249, 246, 238)));
-
-        let mut i_spec = ColorSpec::new();
-        i_spec.set_fg(Some(Color::Rgb(52, 154, 179)));
-
-        let mut e_spec = ColorSpec::new();
-        e_spec.set_fg(Some(Color::Rgb(181, 235, 18)));
-
-        SearchColorSpecs {
-            match_spec: m_spec,
-            text_spec: t_spec,
-            info_spec: i_spec,
-            extra_spec: e_spec,
-        }
-    }
-}
 
 
 pub fn search_file(content: &Vec<u8>, pattern: &String, settings: &mut Settings, file_path: &Path) -> Result<(), Box<dyn std::error::Error>>{
