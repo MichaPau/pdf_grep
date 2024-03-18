@@ -1,3 +1,4 @@
+use crate::settings::ShortenLineMode;
 
 use {
    
@@ -5,58 +6,50 @@ use {
     grep::{regex::RegexMatcher, searcher::{sinks::UTF8, Searcher}}
  
 };
+
 use termcolor::WriteColor;
 use std::io::Write;
 use std::path::Path;
 
-
 //https://github.com/BurntSushi/ripgrep
 
 
-pub fn search_file(content: &Vec<u8>, pattern: &String, settings: &mut Settings, file_path: &Path) -> Result<(), Box<dyn std::error::Error>>{
+pub fn search_file(content: &Vec<u8>, pattern: &String, settings: &Settings, file_path: &Path) -> Result<(), Box<dyn std::error::Error>>{
     
-    settings.stream.set_color(&settings.color_specs.extra_spec)?;
-    writeln!(settings.stream, "Searching: {}", file_path.display())?;
-    settings.stream.set_color(&settings.color_specs.text_spec)?;
-    let search_result = search_pdf_text(pattern, content, settings);
-        //let search_result = grep_utils::search_to_vec(search_term, &file_result);
-        
+    let mut stdout = settings.create_writer();
+
+    stdout.set_color(&settings.color_specs.extra_spec)?;
+    writeln!(stdout, "Searching: {}", file_path.display())?;
+    stdout.set_color(&settings.color_specs.text_spec)?;
+
+    let search_result = search_pdf_text(pattern, content, settings, &mut stdout);
+    
     match search_result {
         Ok(count) => {
-            //println!("{result}");
-            settings.stream.set_color(&settings.color_specs.extra_spec)?;
-            writeln!(settings.stream, "End of file: found {} matches..\n", count)?;
-            settings.stream.set_color(&settings.color_specs.text_spec)?;
-            //print_result(&result);
+            stdout.set_color(&settings.color_specs.extra_spec)?;
+            writeln!(stdout, "End of file: found {} matches..\n", count)?;
+            stdout.set_color(&settings.color_specs.text_spec)?;
 
         },
         Err(e) => println!("{:?}", e),
     }
 
-    settings.stream.reset().unwrap();
+    stdout.reset().unwrap();
 
     Ok(())
 }
 
 #[allow(dead_code)]
-pub fn search_pdf_text(what: &str, from: &[u8], settings: &mut Settings) -> Result<u32, Box<dyn std::error::Error>> {
+pub fn search_pdf_text<W>(what: &str, from: &[u8], settings: &Settings, stdout: &mut W) -> Result<u32, Box<dyn std::error::Error>>
+    where W: std::io::Write + WriteColor {
    
     let s = format!(r"(?i){}", what);
     let matcher = RegexMatcher::new(s.as_str())?;
-    
-    // let mut searcher = SearcherBuilder::new()
-    //     .binary_detection(BinaryDetection::quit(b'\x00'))
-    //     .multi_line(false)
-    //     .line_number(true)
-    //     .build();
 
-    let searcher = &mut settings.searcher;
-    let stdout = &mut settings.stream;
-    let color_specs = &mut settings.color_specs;
-    // let color_choice = if std::io::stdin().is_terminal() { ColorChoice::Auto} else { ColorChoice::Never};
-    // let mut stdout = StandardStream::stdout(color_choice);
+    let mut searcher = settings.create_searcher();
     
-    //let color_specs = SearchColorSpecs::default();
+    let color_specs = &settings.color_specs;
+    
     let mut match_count = 0;
 
     for (page, split) in String::from_utf8_lossy(from).split("\u{c}").enumerate() {
@@ -73,15 +66,55 @@ pub fn search_pdf_text(what: &str, from: &[u8], settings: &mut Settings) -> Resu
                 }
                 write!(stdout, "{}: ", lnum)?;
         
-                let vec_split = get_match_vector_from_line(what, line);
-                for item in vec_split {
-                    if item.to_lowercase() == what.to_lowercase() {
-                        stdout.set_color(&color_specs.match_spec)?;
-                    } else {
-                        stdout.set_color(&color_specs.text_spec)?;
-                    }
+                if settings.print_text {
+                    let vec_split = get_match_vector_from_line(what, line);
+                    for (i, &item) in vec_split.iter().enumerate() {
+                        
+                        if item.to_lowercase() == what.to_lowercase() {
+                            stdout.set_color(&color_specs.match_spec)?;
+                        } else {
+                            stdout.set_color(&color_specs.text_spec)?;
+                        }
 
-                    write!(stdout, "{}", item)?;
+                        if let ShortenLineMode::Trim(len) = settings.shorten_line_mode {
+                            let mut shortened:String = String::new();
+                            if i == 0 && item.to_lowercase() != what.to_lowercase(){
+                                
+                                shortened.push_str("..");
+                                let start_rev:String = item.chars().rev().enumerate().take_while(|(i, c)| {
+                                    if *i + 1 >= len && c.is_whitespace() {
+                                        false
+                                    } else {
+                                        true
+                                    }
+                                }).map(|(_, c)| c).collect();
+
+                                //let start:String = start_rev.chars().rev().collect();
+                                //let start_rev:String = item.chars().take(len).take_while(|c| !c.is_whitespace()).collect();
+                                shortened.push_str(start_rev.chars().rev().collect::<String>().as_str());
+                                
+
+                            } else if i == vec_split.len() - 1 && item.to_lowercase() != what.to_lowercase() {
+                                //shortened  = item.chars().take(len).take_while(|c| !c.is_whitespace()).collect();
+                                
+                                shortened = item.chars().enumerate().take_while(|(i, c)| {
+                                    if *i + 1 >= len && c.is_whitespace() {
+                                        false
+                                    } else {
+                                        true
+                                    }
+                                }).map(|(_, c)| c).collect();
+                                shortened.push_str("..\n");
+                                
+                            } else {
+                                shortened = String::from(item);
+                            }
+                            write!(stdout, "{}", shortened)?;
+                            
+                        } else {
+                            write!(stdout, "{}", item)?;
+                        }
+                    }
                 }
                
                 match_count += 1;
@@ -114,6 +147,44 @@ fn get_match_vector_from_line<'a>(what: &'a str, line: &'a str) -> Vec<&'a str> 
     result
 }
 
+fn get_match_vector_from_line2<'a>(what: &'a str, line: &'a str, trim: ShortenLineMode) -> Vec<&'a str> {
+    let mut result = Vec::new();
+    let mut last = 0;
+    let temp_line = line.to_lowercase();
+    for (index, matched) in temp_line.match_indices(what.to_lowercase().as_str()) {
+        if last != index {
+            result.push(&line[last..index]);
+        }
+        //result.push(matched);
+        result.push(&line[index..index + matched.len()]);
+        last = index + matched.len();
+    }
+
+    if last < line.len() {
+        result.push(&line[last..]);
+    }
+
+    if let ShortenLineMode::Trim(len) = trim {
+        //result.first_mut().unwrap().replace(from, to)
+        let trim_result = result.iter().enumerate().map(|(i ,&item)| {
+            if i == 0 && item.len() > len {
+                let sub = &item[item.len() - 1 - len..];
+                sub
+            }
+            else if i == result.len() -1 && item.len() > len {
+                let sub = &item[..len];
+                sub
+            } else {
+                item
+            }
+        }).collect();
+
+        trim_result
+    } else {
+        result
+    }
+    
+}
 
 pub fn search_to_vec(what: &str, from: &[u8]) -> Result<Vec<(u64, String)>, Box<dyn std::error::Error>> {
    
@@ -135,8 +206,48 @@ pub fn search_to_vec(what: &str, from: &[u8]) -> Result<Vec<(u64, String)>, Box<
     Ok(matches)
 }
 
+#[ignore]
+#[test]
+fn test_tokenizerish() {
+    let hay = "this is some sample text to look for a word. There are more words in the Text, because it's a text, we'll talk more about this!";
+    let result = get_match_vector_from_line2("text", hay, ShortenLineMode::Trim(7));
 
+    //let result:Vec<_> = hay.split(|c: char| !c.is_alphanumeric()).collect();
+    println!("{:?}", result);
+}
 
+#[ignore]
+#[test]
+fn test_format_write() {
+    let str = " àéù ç is a sentence, with some text and !!!! 💖💖 💖💖💖 ";
+    let max = 5;
+    //let len = str.chars().count();
+
+    //to first whitespace after max
+    let end:String = str.chars().enumerate().take_while(|(i, c)| {
+        if *i + 1 >= max && c.is_whitespace() {
+            false
+        } else {
+            true
+        }
+    }).map(|(_, c)| c).collect();
+    //let end:String   = str.chars().take(max).take_while(|c| !c.is_whitespace()).collect();
+    
+    let start_rev:String = str.chars().rev().enumerate().take_while(|(i, c)| {
+        if *i + 1 >= max && c.is_whitespace() {
+            false
+        } else {
+            true
+        }
+    }).map(|(_, c)| c).collect();
+    let start:String = start_rev.chars().rev().collect();
+
+    let mut stdout = std::io::stdout();
+    writeln!(stdout, "----------------------------").unwrap();
+    writeln!(stdout, "start: ..{}", start).unwrap();
+    writeln!(stdout, "end: {}..", end).unwrap();
+    writeln!(stdout, "----------------------------").unwrap();
+}
 // #[allow(dead_code)]
 // pub fn search_to_console(what: &str, from: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
    

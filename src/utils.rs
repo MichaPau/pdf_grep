@@ -27,6 +27,18 @@ pub fn get_folder_tree(dir_path: &Path) -> BTreeMap<String, Vec<String>> {
 
 }
 
+pub fn get_folder_files(dir_path: &Path) -> Vec<(String, String)> {
+    let mut list:Vec<(String, String)> = vec![];
+
+    let walk_iter = WalkDir::new(dir_path).into_iter();
+    for entry in walk_iter.map(Result::unwrap).filter(|entry| is_pdf(entry)) {
+       
+       list.push((entry.path().parent().unwrap().to_str().unwrap().to_string(), entry.path().display().to_string()));
+    }
+
+    list
+}
+
 pub fn _dump<I, K, V, A>(iter: I) 
     where 
         I: IntoIterator<Item = (K, V)>, 
