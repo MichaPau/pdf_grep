@@ -16,7 +16,7 @@ use std::path::Path;
 
 pub fn search_file(content: &Vec<u8>, pattern: &String, settings: &Settings, file_path: &Path) -> Result<(), Box<dyn std::error::Error>>{
     
-    let mut stdout = settings.create_writer();
+    let mut stdout = settings.create_color_writer();
 
     stdout.set_color(&settings.color_specs.extra_spec)?;
     writeln!(stdout, "Searching: {}", file_path.display())?;

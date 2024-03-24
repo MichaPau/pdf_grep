@@ -10,8 +10,8 @@ use std::env;
 use std::result::Result;
 
 //use grep_utils::Settings;
-use rayon::prelude::*;
-use clap::{Parser, Subcommand};
+
+
 //use termcolor::{StandardStream, ColorChoice};
 //use walkdir::WalkDir;
 
@@ -21,46 +21,20 @@ use clap::{Parser, Subcommand};
 mod grep_utils;
 mod utils;
 mod settings;
+mod pdf_tools;
 
 // mod parse_utils;
 // mod types;
 
-use settings::XpdfWrapper;
+use pdf_tools::XpdfWrapper;
 
-//use xpdf_tools::xpdf_text;
+
 use xpdf_tools::types::XpdfArgs;
 //use xpdf_tools::xpdf_info::PdfInfo;
-use xpdf_tools::{PdfError, XpdfTools};
+use xpdf_tools::XpdfTools;
 use xpdf_tools::{self};
 
-use crate::settings::{PdfTestTools, Settings};
-//use crate::utils::get_folder_files;
-
-
-
-
-#[derive(Parser, Debug)]
-struct Cli {
-    #[arg(short, long, group = "input")]
-    directory: Option<PathBuf>,
-    #[arg(short, long, group = "input")]
-    file: Option<PathBuf>,
-
-    // #[arg(short, long)]
-    // search: Option<String>,
-
-    #[command(subcommand)]
-    command: Actions,
-}
-
-#[derive(Debug, Subcommand, Clone)]
-enum Actions {
-    Search { pattern: String },
-    Info,
-    Test,
-    Text,
-
-}
+use crate::settings::{Actions, Settings};
 
 type BoxError = std::boxed::Box<dyn
 	std::error::Error   // must implement Error to satisfy ?
@@ -68,171 +42,39 @@ type BoxError = std::boxed::Box<dyn
 	+ std::marker::Sync // needed for threads
 >;
 
-
-
 fn _write_to_file(file_path: &str, content: &String) {
     let p = Path::new(file_path);
     let mut file = std::fs::File::create(p).unwrap();
     file.write_all(content.as_bytes()).unwrap();
-
-}
-fn get_info_file(file_path: &Path) {
-    
-    //let tools = XpdfTools::builder().extra_args(vec!["-rawdates".to_string(), "-meta".to_string()]).build();
-    let tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
-        .extra_args(vec![XpdfArgs::RawDates, XpdfArgs::Metadata])
-        .build();
-    
-    match tools.pdf_info(file_path) {
-        Ok(pdf_info) => {
-            println!("{:#?}", pdf_info.info_map);
-        },
-        Err(e) => println!("{:?}", e),
-    }
-    
-}
-
-fn get_info_dir(dir_path: &Path) {
-    println!("info for: {:?}", dir_path);
-}
-
-//tools: &dyn PDFTools
-fn search_invoke_file(file: String, pattern: &String, settings: &Settings) {
-    //let settings = settings::Settings::default();
-
-    //let mut output = std::io::stdout();
-    //writeln!(settings.stream, "Searching folder {dir}").unwrap();
-   
-        let p = Path::new(&file);
-        match settings.tools.pdf_text(&p) {
-            Ok(content) => {
-                grep_utils::search_file(&content, pattern, &settings, &p).unwrap();
-            },
-            Err(e) => {
-                if let Some(pdf_error) = e.downcast_ref::<PdfError>() {
-                    io::stderr().write(pdf_error.message.as_bytes()).unwrap();
-                    io::stderr().write(b"\n").unwrap();
-                    io::stderr().write(pdf_error.process_message.as_bytes()).unwrap();
-                    
-                } else {
-                    io::stderr().write(e.to_string().as_bytes()).unwrap();
-                }
-                io::stderr().flush().unwrap();
-            },
-        }
-    
-}
-//tools: &dyn PDFTools
-fn search_invoke_folders(_dir: &str, list: &Vec<String>, pattern: &String, settings: &Settings) {
-    // let tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
-    // .build();
-
-    // let mut settings = settings::Settings {
-    //     tools: Box::new(XpdfWrapper {tools}), 
-    //     ..Default::default()
-    // };
-    //let settings = settings::Settings::default();
-
-    //let mut output = std::io::stdout();
-    //writeln!(settings.stream, "Searching folder {dir}").unwrap();
-    for file in list {
-        let p = Path::new(file);
-        match settings.tools.pdf_text(&p) {
-            Ok(content) => {
-                grep_utils::search_file(&content, pattern, &settings, &p).unwrap();
-            },
-            Err(e) => {
-                if let Some(pdf_error) = e.downcast_ref::<PdfError>() {
-                    io::stderr().write(pdf_error.message.as_bytes()).unwrap();
-                    io::stderr().write(b"\n").unwrap();
-                    io::stderr().write(pdf_error.process_message.as_bytes()).unwrap();
-                    
-                } else {
-                    io::stderr().write(e.to_string().as_bytes()).unwrap();
-                }
-                io::stderr().flush().unwrap();
-            },
-        }
-    }
-}
-fn search_dir(dir_path: &Path, pattern: &String, settings: &mut Settings) {
-   
-    // let tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
-    // .build();
-    //println!("{dir_path:?} - {pattern}");
-    let pdf_map = utils::get_folder_tree(dir_path);
-
-    pdf_map.par_iter().for_each(|(dir, list)| {
-        //search_invoke(dir, list, pattern, &tools);
-        search_invoke_folders(dir, list, pattern, &settings);
-        //search_invoke(dir, list, pattern, settings);
-        
-    });
-    //utils::_dump(&pdf_map);
-
-}
-
-fn search_file(file_path: &Path, pattern: &String, settings: &mut Settings) {
-    //let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    //let mut settings = settings::Settings::default();
-    
-    // let tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
-    //     .extra_args(vec![XpdfArgs::Encoding("UTF-8".into())])
-    //     .build();
-
-    match settings.tools.pdf_text(file_path) {
-        Ok(content) => {
-            grep_utils::search_file(&content, pattern, settings, file_path).unwrap();
-        },
-        Err(e) => {
-            if let Some(pdf_error) = e.downcast_ref::<PdfError>() {
-                io::stderr().write(pdf_error.message.as_bytes()).unwrap();
-                io::stderr().write(b"\n").unwrap();
-                io::stderr().write(pdf_error.process_message.as_bytes()).unwrap();
-                
-            } else {
-                io::stderr().write(e.to_string().as_bytes()).unwrap();
-            }
-            io::stderr().flush().unwrap();
-        },
-    }
-    // if let Ok(content) = tools.pdf_text(file_path) {
-    //     grep_utils::search_file(&content, pattern);
-    // } else {
-    //     eprintln!("Error opening pdf file: ")
-    // }
-    //todo!();
 }
 
 fn main() -> Result<(), BoxError>{
     env::set_var("RUST_BACKTRACE", "1");
     println!("{}", xpdf_tools::get_version());
 
-    let mut settings = Settings::default();
+    //let mut settings = Settings::default();
+    let mut settings = Settings::new();
     let _tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
                     .extra_args(vec![XpdfArgs::Encoding("UTF-8".into())])
                     .build();    
 
-    let cli = Cli::parse();
-
+    settings.tools = Box::new(XpdfWrapper {tools: _tools});
+    // let cli = Cli::parse();
+    let cli = settings.cli.as_ref().unwrap();
     match cli.command { 
         Actions::Info => { 
             if let Some(dir) = cli.directory.as_deref() {
-                get_info_dir(dir);
+                pdf_tools::get_info_dir(dir);
             } else if let Some(file) = cli.file.as_deref() {
-                get_info_file(&file);
+                pdf_tools::get_info_file(&file, &settings);
             }
         },
         Actions::Test => { println!("Action: test");},
         Actions::Search {ref pattern}=> {
             if let Some(dir) = cli.directory.as_deref() {
-                settings.tools = Box::new(XpdfWrapper {tools: _tools});
-                search_dir(dir, pattern, &mut settings);
+                pdf_tools::search_dir(dir, pattern, &settings);
             } else if let Some(file) = cli.file.as_deref() {
-                
-                //settings.tools = Box::new(XpdfWrapper {tools});
-                settings.tools = Box::new(PdfTestTools {});
-                search_file(&file, pattern, &mut settings);
+                pdf_tools::search_file(&file, pattern, &settings);
             } 
             //println!("Action: search:{}", *pattern);
         },
@@ -361,6 +203,8 @@ fn test_folder_mode() {
     use std::time::Instant;
     use termcolor::ColorChoice;
 
+    use rayon::prelude::*;
+
     let mut _settings = Settings::default();
     let tools_folder = "./tools/xpdf-tools-linux-4.05/bin64/";
     let _tools = XpdfTools::builder(PathBuf::from(tools_folder)).unwrap()
@@ -402,7 +246,7 @@ fn test_folder_mode() {
 
     start = Instant::now();
     _file_list.par_iter().for_each(|(_dir, file)| {
-        search_invoke_file(String::from(file), &pattern, &_settings);
+        pdf_tools::search_invoke_file(String::from(file), &pattern, &_settings);
     });
 
     let elapsed2 = start.elapsed();

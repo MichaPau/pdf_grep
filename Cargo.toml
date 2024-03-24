@@ -7,11 +7,14 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5.1", features = ["derive"] }
+directories = "5.0.1"
 grep = "0.3.1"
 pdf-extract = "0.7.4"
 rayon = "1.9.0"
 regex = "1.10.3"
+serde = { version = "1.0.197", features = ["derive"] }
 termcolor = "1.4.1"
+toml = "0.8.12"
 walkdir = "2.5.0"
 # xpdf_tools = {path = "../../libs/xpdf_tools"}
 xpdf_tools = { git = "https://github.com/MichaPau/xpdf_tools.git"}
