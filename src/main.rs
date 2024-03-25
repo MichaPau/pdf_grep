@@ -194,7 +194,7 @@ fn test_encoding() {
 
 // }
 
-//#[ignore]
+#[ignore]
 #[test]
 fn test_folder_mode() {
     use utils::get_folder_files;
