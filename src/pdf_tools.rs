@@ -1,4 +1,5 @@
 use std::{collections::BTreeMap, io::{self, Write}, path::Path};
+use core::fmt::Debug;
 
 use xpdf_tools::{PdfError, XpdfTools};
 
@@ -11,9 +12,16 @@ pub trait PDFTools {
     fn pdf_text(&self, file_path: &Path) -> Result<Vec<u8>, BoxError>;
 }
 
+impl Debug for dyn PDFTools + std::marker::Send + std::marker::Sync {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PDFTools")
+    }
+}
+#[derive(Debug)]
 pub struct XpdfWrapper {
     pub tools: XpdfTools,
 }
+#[derive(Debug)]
 pub struct  PdfTestTools {
     
 }

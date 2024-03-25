@@ -6,13 +6,11 @@ use serde::{Serialize, Deserialize};
 use crate::BoxError;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-struct ConfigColorSpec {
-    name: String,
-    fg: Option<(u8, u8, u8)>,
-    bg: Option<(u8, u8, u8)>,
-    //styles: TextStyles,
-    //styles: HashMap<String, bool>,
-    styles: Vec<(String, bool)>,
+pub struct ConfigColorSpec {
+    pub name: String,
+    pub fg: Option<(u8, u8, u8)>,
+    pub bg: Option<(u8, u8, u8)>,
+    pub styles: Vec<(String, bool)>,
 }
 
 impl Default for ConfigColorSpec {
@@ -25,19 +23,19 @@ impl Default for ConfigColorSpec {
             //styles: HashMap::from([("bold".into(), false), ("unbderline".into(), false)]),
             styles: vec![
                 ("bold".into(), false), ("intense".into(), false), ("underline".into(), false),
-                ("dimmed".into(), false), ("italic".into(), false), ("reset".into(), false), ("strikethrough".into(), false)
+                ("dimmed".into(), false), ("italic".into(), false), ("reset".into(), true), ("strikethrough".into(), false)
             ],
         }
     }
 }
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct ColorsConfig {
-    match_color_spec: ConfigColorSpec,
-    text_color_spec: ConfigColorSpec,
-    info_color_spec: ConfigColorSpec,
-    extra_color_spec: ConfigColorSpec,
+// #[derive(Debug, Serialize, Deserialize, Clone)]
+// struct ColorsConfig {
+//     pub match_color_spec: ConfigColorSpec,
+//     pub text_color_spec: ConfigColorSpec,
+//     info_color_spec: ConfigColorSpec,
+//     extra_color_spec: ConfigColorSpec,
 
-}
+// }
 
 const CONFIG_FOLDER_NAME: &str = "pdf_grep";
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -45,8 +43,8 @@ const CONFIG_FILE_NAME: &str = "config.toml";
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct TomlSettings {
     //colors: ColorsConfig,
-    xpdf_tools_folder: Option<PathBuf>,
-    colors: Vec<ConfigColorSpec>,
+    pub xpdf_tools_folder: Option<PathBuf>,
+    pub colors: Vec<ConfigColorSpec>,
 }
 
 impl TomlSettings {
@@ -54,6 +52,7 @@ impl TomlSettings {
         if let Some(proj_dirs) = ProjectDirs::from("", "",  CONFIG_FOLDER_NAME) {
             let mut toml_path = PathBuf::from(proj_dirs.config_dir());
             toml_path.push(CONFIG_FILE_NAME);
+            println!("Load config file from:{:?}", toml_path);
             let mut read_data = String::new();
             let mut read_file = File::open(&toml_path)?;
             read_file.read_to_string(&mut read_data)?;
@@ -66,14 +65,14 @@ impl TomlSettings {
 
 
     }
-    fn create_default() -> Result<(), BoxError> {
+    pub fn create_default() -> Result<TomlSettings, BoxError> {
         let config = TomlSettings {
             xpdf_tools_folder: None,
             colors: vec![
                 ConfigColorSpec { name: "match".into(), fg: Some((255, 197, 12)), bg: None,
                 styles: vec![
                     ("bold".into(), true), ("intense".into(), true), ("underline".into(), true),
-                    ("dimmed".into(), false), ("italic".into(), false), ("reset".into(), false), ("strikethrough".into(), false)
+                    ("dimmed".into(), false), ("italic".into(), false), ("reset".into(), true), ("strikethrough".into(), false)
                 ]
                 },
                 ConfigColorSpec { name: "text".into(), fg: Some((249, 246, 238)), bg: None,
@@ -105,7 +104,7 @@ impl TomlSettings {
         } else {
             return Err("Could not create config file.".into());
         }
-        Ok(())
+        Ok(config)
     }
 
 }
