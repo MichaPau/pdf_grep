@@ -6,23 +6,23 @@ use xpdf_tools::{PdfError, XpdfTools};
 use crate::{grep_utils, settings::{FolderSearchMode, Settings}, utils, BoxError};
 
 use rayon::prelude::*;
-pub trait PDFTools {
+pub trait PDFTools: std::fmt::Debug {
 
     fn pdf_info(&self, file_path: &Path) -> Result<BTreeMap<String, Option<String>>, BoxError>;
     fn pdf_text(&self, file_path: &Path) -> Result<Vec<u8>, BoxError>;
 }
 
-impl Debug for dyn PDFTools + std::marker::Send + std::marker::Sync {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "PDFTools")
-    }
-}
+// impl Debug for dyn PDFTools + std::marker::Send + std::marker::Sync {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "PDFTools")
+//     }
+// }
 #[derive(Debug)]
 pub struct XpdfWrapper {
     pub tools: XpdfTools,
 }
 #[derive(Debug)]
-pub struct  PdfTestTools {
+pub struct  PdfDummyTool {
     
 }
 
@@ -62,7 +62,7 @@ impl PDFTools for XpdfWrapper {
     }
 }
 
-impl PDFTools for PdfTestTools {
+impl PDFTools for PdfDummyTool {
     fn pdf_info(&self, _file_path: &Path) -> Result<BTreeMap<String, Option<String>>, BoxError> {
         let info = BTreeMap::from([
             ("Title".into(), Some("Test tool title".into())), ("Author".into(), Option::None)]);
