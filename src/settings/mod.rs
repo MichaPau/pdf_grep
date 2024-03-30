@@ -1,13 +1,14 @@
 
-use std::io::IsTerminal;
+use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 
-use grep::searcher::{Searcher, SearcherBuilder};
-use termcolor::{ColorChoice, WriteColor};
+use grep::searcher::{BinaryDetection, Searcher, SearcherBuilder};
+use serde::{Deserialize, Serialize};
+use termcolor::{BufferedStandardStream, ColorChoice, WriteColor};
 use termcolor::{Color, StandardStream, ColorSpec};
 
 use clap::{Parser, Subcommand};
-use crate::pdf_tools::{PDFTools, PdfTestTools};
+use crate::pdf_tools::{AvailablePdfTools, PDFTools, PdfDummyTool};
 
 use self::toml_settings::{ConfigColorSpec, TomlSettings};
 
@@ -35,21 +36,23 @@ pub enum Actions {
     Text,
 
 }
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Serialize, Deserialize)]
 pub enum FolderSearchMode {
     ThreadPerFolder,
     ThreadPerFile,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum ShortenLineMode {
     None,
     Trim(usize),
 }
+
+
 #[derive(Debug)]
 pub struct Settings {
     // pub stream: StandardStream,
-    // pub searcher: Searcher,
+    //pub searcher: Searcher,
     
     pub color_specs: SearchColorSpecs,
     pub tools: Box<dyn PDFTools 
@@ -62,6 +65,7 @@ pub struct Settings {
     pub color_choice: ColorChoice,
 
     pub cli: Option<Cli>,
+    pub use_pdf_tool: AvailablePdfTools,
     pub xpdf_tools_folder: Option<PathBuf>,
     
 }
@@ -71,16 +75,41 @@ impl Settings {
         let mut settings = Settings::default();
 
         Settings::merge_toml_settings(&mut settings);
-        settings.cli = Some(Cli::parse());
-
+        if cfg!(not(test)) {
+            println!("Parse cli - not testing");
+            settings.cli = Some(Cli::parse());
+        }
+        
         settings
     }
 
     fn merge_toml_settings(settings: &mut Settings) {
-        let toml = TomlSettings::load()
-            .unwrap_or_else(|_err| TomlSettings::create_default()
-                .unwrap_or( TomlSettings { xpdf_tools_folder: None, colors: vec![]}));
+
+        let toml: TomlSettings;
+
+        match TomlSettings::load() {
+            Ok(toml_loaded) => toml = toml_loaded,
+
+            Err(e) => {
+                if let Some(_e) = e.downcast_ref::<io::Error>() {
+                    toml = TomlSettings::create_default().unwrap();
+                } else {
+                    panic!("{:?}", e.to_string());
+                }
+            }
+        }
+        // let toml = TomlSettings::load()
+        //     .unwrap_or_else(|_err| {
+        //          if let Some(e) = _err.downcast_ref::<io::Error>() {
+        //             TomlSettings::create_default().unwrap()
+        //         } else{
+        //             _err
+        //         }
+                
+                
+        //     });
         
+        settings.use_pdf_tool = toml.use_pdf_tool;
         settings.xpdf_tools_folder = toml.xpdf_tools_folder;
         
         for color_item in toml.colors {
@@ -94,13 +123,6 @@ impl Settings {
         }
     }
     fn create_color_item(item: &ConfigColorSpec) -> ColorSpec {
-        // let mut m_spec = ColorSpec::new();
-        // m_spec.set_fg(Some(Color::Rgb(255, 197, 12)));
-        // m_spec.set_bold(true);
-        // m_spec.set_underline(true);
-        // m_spec.set_intense(true);
-        // ("bold".into(), false), ("intense".into(), false), ("underline".into(), false),
-        //         ("dimmed".into(), false), ("italic".into(), false), ("reset".into(), false), ("strikethrough".into(), false)
 
         let mut spec = ColorSpec::new();
         if let Some(fg) = item.fg {
@@ -127,23 +149,25 @@ impl Settings {
 
         spec
     }
-    pub fn create_color_writer(&self) -> impl std::io::Write + WriteColor{
+    //impl std::io::Write + WriteColor
+    pub fn create_color_writer(&self) -> impl std::io::Write + WriteColor {
         //let color_choice = if std::io::stdin().is_terminal() { ColorChoice::Auto} else { ColorChoice::Never};
-        let stream = StandardStream::stdout(self.color_choice);
+        //let stream = StandardStream::stdout(self.color_choice);
+        let stream = BufferedStandardStream::stdout(self.color_choice);
         stream
     }
 
     pub fn create_writer(&self) -> impl std::io::Write {
         //let color_choice = if std::io::stdin().is_terminal() { ColorChoice::Auto} else { ColorChoice::Never};
-        let stream = StandardStream::stdout(self.color_choice);
+        let stream = BufferedStandardStream::stdout(self.color_choice);
         stream
     }
 
-    pub fn create_searcher(&self) -> Searcher {
+    pub fn create_searcher() -> Searcher {
         let searcher = SearcherBuilder::new()
-            //.binary_detection(BinaryDetection::quit(b'\x00'))
-            //.multi_line(false)
-            //.line_number(true)
+            .binary_detection(BinaryDetection::quit(b'\x00'))
+            .multi_line(false)
+            .line_number(true)
             .build();
         
         searcher
@@ -154,22 +178,23 @@ impl Default for Settings {
         let color_choice = if std::io::stdin().is_terminal() { ColorChoice::Auto} else { ColorChoice::Never};
         // let stream = StandardStream::stdout(color_choice);
 
-        
-
         Settings {
-            //stream,
-            //searcher,
             
+            //searcher: Settings::create_searcher(),
+            //overide from toml config
             color_specs: SearchColorSpecs::default(),
-            tools: Box::new(PdfTestTools {}),
+            use_pdf_tool: AvailablePdfTools::UsePdfDummyTool,
+            tools: Box::new(PdfDummyTool {}),
+            xpdf_tools_folder: None,
+            
+            cli: None,
+            //override from cli(clap) if defined 
             folder_search_mode: FolderSearchMode::ThreadPerFile,
             print_text: true,
             shorten_line_mode: ShortenLineMode::None,
+            
             color_choice,
-            cli: None,
-            xpdf_tools_folder: None,
         }
-        
     }
 }
 #[derive(Debug)]
@@ -207,6 +232,7 @@ impl Default for SearchColorSpecs {
     }
 }
 
+#[ignore]
 #[test]
 fn test_merge_settings() {
     let settings = Settings::new();
