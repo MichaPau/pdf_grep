@@ -7,14 +7,47 @@ use {
  
 };
 
+use grep::matcher::Matcher;
+
 use termcolor::WriteColor;
 use std::io::Write;
 use std::path::Path;
 
 //https://github.com/BurntSushi/ripgrep
 
-
 pub fn search_file(content: &Vec<u8>, pattern: &String, settings: &Settings, file_path: &Path) -> Result<(), Box<dyn std::error::Error>>{
+    
+    let mut stdout = settings.create_color_writer();
+    let mut searcher = Settings::create_searcher();
+
+    stdout.set_color(&settings.color_specs.extra_spec)?;
+    writeln!(stdout, "Searching: {}", file_path.display())?;
+    stdout.set_color(&settings.color_specs.text_spec)?;
+
+    let s = format!(r"(?i){}", pattern);
+    let matcher = RegexMatcher::new(s.as_str())?;
+    
+    let mut total = 0;
+    for (page, split) in String::from_utf8_lossy(&content).split("\u{c}").enumerate() {
+        let search_result = search_pdf_page(&matcher, split.as_bytes(), page, settings, &mut stdout, &mut searcher);
+        match search_result {
+            Ok(count) => {
+                total += count;
+                ()
+            },
+            Err(e) => eprint!("{}", e),
+        }
+    }
+    stdout.set_color(&settings.color_specs.extra_spec)?;
+    writeln!(stdout, "End of file: found {} matches..\n", total)?;
+    stdout.set_color(&settings.color_specs.text_spec)?;
+
+    stdout.reset()?;
+
+    Ok(())
+}
+
+pub fn search_file2(content: &Vec<u8>, pattern: &String, settings: &Settings, file_path: &Path) -> Result<(), Box<dyn std::error::Error>>{
     
     let mut stdout = settings.create_color_writer();
 
@@ -29,14 +62,127 @@ pub fn search_file(content: &Vec<u8>, pattern: &String, settings: &Settings, fil
             stdout.set_color(&settings.color_specs.extra_spec)?;
             writeln!(stdout, "End of file: found {} matches..\n", count)?;
             stdout.set_color(&settings.color_specs.text_spec)?;
-
+            ()
         },
-        Err(e) => println!("{:?}", e),
+        Err(e) => eprint!("{}", e),
     }
 
-    stdout.reset().unwrap();
+    stdout.reset()?;
 
     Ok(())
+}
+
+#[allow(dead_code)]
+pub fn search_pdf_page<W>(matcher: &RegexMatcher, from: &[u8], page: usize, settings: &Settings, stdout: &mut W, searcher: &mut Searcher) -> Result<u32, Box<dyn std::error::Error>>
+where W: std::io::Write + WriteColor {
+
+    let color_specs = &settings.color_specs;
+    
+    let mut match_count = 0;
+    let page = page as i32;
+    let mut page_found:i32 = -1;
+
+    
+    let _result = searcher.search_slice(&matcher, from,  UTF8(|lnum, line| {
+        
+            let first_match = matcher.find(line.as_bytes())?.unwrap();
+        
+            stdout.set_color(&color_specs.info_spec)?;
+            if page != page_found {
+                writeln!(stdout, "Page: {}", page + 1)?;
+                page_found = page;
+            }
+            write!(stdout, "{}: ", lnum)?;
+            let mut index = 0;
+            
+
+            if let ShortenLineMode::Trim(len) = settings.shorten_line_mode {
+                if first_match.start() as isize - len as isize > 0 {
+                    index = first_match.start() - len;
+                    write!(stdout, "..").unwrap();
+                } 
+            } else {
+
+            }
+            let line_bytes = line.as_bytes(); 
+            
+            let _ = matcher.find_iter_at(line_bytes, index, |m| {
+                //println!("{:?}", m); true
+                stdout.set_color(&color_specs.text_spec).unwrap();
+                write!(stdout, "{}", line[index..m.start()].to_owned()).unwrap();
+                stdout.set_color(&color_specs.match_spec).unwrap();
+                write!(stdout, "{}", line[m.start()..m.end()].to_owned()).unwrap();
+                index = m.end();
+                true
+            });
+            stdout.set_color(&color_specs.text_spec).unwrap();
+            if let ShortenLineMode::Trim(len) = settings.shorten_line_mode {
+                let mut end_index = index + len;
+                if end_index > line.len() {
+                    end_index = line.len();
+                }
+                let mut end = line[index..end_index].to_owned();
+                end.push_str("..\n");
+                write!(stdout, "{}", end).unwrap();
+            } else {
+                write!(stdout, "{}", line[index..].to_owned()).unwrap();
+            }
+            
+
+            // if settings.print_text {
+            //     let vec_split = get_match_vector_from_line(what, line);
+            //     for (i, &item) in vec_split.iter().enumerate() {
+                    
+            //         if item.to_lowercase() == what.to_lowercase() {
+            //             stdout.set_color(&color_specs.match_spec)?;
+            //         } else {
+            //             stdout.set_color(&color_specs.text_spec)?;
+            //         }
+
+            //         if let ShortenLineMode::Trim(len) = settings.shorten_line_mode {
+            //             let mut shortened:String = String::new();
+            //             if i == 0 && item.to_lowercase() != what.to_lowercase(){
+                            
+            //                 shortened.push_str("..");
+            //                 let start_rev:String = item.chars().rev().enumerate().take_while(|(i, c)| {
+            //                     if *i + 1 >= len && c.is_whitespace() {
+            //                         false
+            //                     } else {
+            //                         true
+            //                     }
+            //                 }).map(|(_, c)| c).collect();
+
+            //                 shortened.push_str(start_rev.chars().rev().collect::<String>().as_str());
+                            
+
+            //             } else if i == vec_split.len() - 1 && item.to_lowercase() != what.to_lowercase() {
+                            
+            //                 shortened = item.chars().enumerate().take_while(|(i, c)| {
+            //                     if *i + 1 >= len && c.is_whitespace() {
+            //                         false
+            //                     } else {
+            //                         true
+            //                     }
+            //                 }).map(|(_, c)| c).collect();
+            //                 shortened.push_str("..\n");
+                            
+            //             } else {
+            //                 shortened = String::from(item);
+            //             }
+            //             write!(stdout, "{}", shortened)?;
+                        
+            //         } else {
+            //             write!(stdout, "{}", item)?;
+            //         }
+            //     }
+            // }
+            
+            match_count += 1;
+            Ok(true)
+        }));
+
+        //stdout.reset()?;
+        Ok(match_count)
 }
 
 #[allow(dead_code)]
@@ -46,7 +192,7 @@ pub fn search_pdf_text<W>(what: &str, from: &[u8], settings: &Settings, stdout: 
     let s = format!(r"(?i){}", what);
     let matcher = RegexMatcher::new(s.as_str())?;
 
-    let mut searcher = settings.create_searcher();
+    let mut searcher = Settings::create_searcher();
     
     let color_specs = &settings.color_specs;
     
@@ -186,7 +332,7 @@ fn get_match_vector_from_line2<'a>(what: &'a str, line: &'a str, trim: ShortenLi
     
 }
 
-pub fn search_to_vec(what: &str, from: &[u8]) -> Result<Vec<(u64, String)>, Box<dyn std::error::Error>> {
+fn search_to_vec(what: &str, from: &[u8]) -> Result<Vec<(u64, String)>, Box<dyn std::error::Error>> {
    
     let s = format!(r"(?i){}", what);
     println!("search for: {}", s);
