@@ -15,6 +15,7 @@ regex = "1.10.3"
 serde = { version = "1.0.197", features = ["derive"] }
 termcolor = "1.4.1"
 toml = "0.8.12"
+toml_edit = "0.22.9"
 walkdir = "2.5.0"
 # xpdf_tools = {path = "../../libs/xpdf_tools"}
 xpdf_tools = { git = "https://github.com/MichaPau/xpdf_tools.git"}

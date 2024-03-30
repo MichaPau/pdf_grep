@@ -3,13 +3,16 @@ use std::io::{Write, Read};
 use directories::ProjectDirs;
 use serde::{Serialize, Deserialize};
 
-use crate::BoxError;
+
+use crate::{pdf_tools::AvailablePdfTools, BoxError};
+
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ConfigColorSpec {
     pub name: String,
     pub fg: Option<(u8, u8, u8)>,
     pub bg: Option<(u8, u8, u8)>,
+    
     pub styles: Vec<(String, bool)>,
 }
 
@@ -19,8 +22,6 @@ impl Default for ConfigColorSpec {
             name: "default".into(),
             fg: None,
             bg: None,
-            //styles: TextStyles::default(),
-            //styles: HashMap::from([("bold".into(), false), ("unbderline".into(), false)]),
             styles: vec![
                 ("bold".into(), false), ("intense".into(), false), ("underline".into(), false),
                 ("dimmed".into(), false), ("italic".into(), false), ("reset".into(), true), ("strikethrough".into(), false)
@@ -28,14 +29,7 @@ impl Default for ConfigColorSpec {
         }
     }
 }
-// #[derive(Debug, Serialize, Deserialize, Clone)]
-// struct ColorsConfig {
-//     pub match_color_spec: ConfigColorSpec,
-//     pub text_color_spec: ConfigColorSpec,
-//     info_color_spec: ConfigColorSpec,
-//     extra_color_spec: ConfigColorSpec,
 
-// }
 
 const CONFIG_FOLDER_NAME: &str = "pdf_grep";
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -43,6 +37,7 @@ const CONFIG_FILE_NAME: &str = "config.toml";
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct TomlSettings {
     //colors: ColorsConfig,
+    pub use_pdf_tool: AvailablePdfTools,
     pub xpdf_tools_folder: Option<PathBuf>,
     pub colors: Vec<ConfigColorSpec>,
 }
@@ -67,7 +62,8 @@ impl TomlSettings {
     }
     pub fn create_default() -> Result<TomlSettings, BoxError> {
         let config = TomlSettings {
-            xpdf_tools_folder: None,
+            xpdf_tools_folder: Some(PathBuf::from("./")),
+            use_pdf_tool: AvailablePdfTools::UseXpdfTools,
             colors: vec![
                 ConfigColorSpec { name: "match".into(), fg: Some((255, 197, 12)), bg: None,
                 styles: vec![
@@ -107,4 +103,73 @@ impl TomlSettings {
         Ok(config)
     }
 
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TextStyles {
+    bold: bool,
+    underline: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, io::Write, path::PathBuf};
+
+    use serde::{Serialize, Deserialize};
+    
+    #[derive(Serialize, Deserialize)]
+    
+    struct TestSettings {
+        pub xpdf_tools_folder: Option<PathBuf>,
+        
+        pub colors: Vec<TestConfigColorSpec>,
+    }
+    #[derive(Serialize, Deserialize)]
+    struct TestConfigColorSpec {
+        pub name: String,
+        pub fg: Option<(u8, u8, u8)>,
+        pub bg: Option<(u8, u8, u8)>,
+        
+        #[serde(flatten)]
+        pub styles: TestTextStyles,
+    }
+    #[derive(Serialize, Deserialize)]
+    pub struct TestTextStyles {
+        bold: bool,
+        underline: bool,
+    }
+    #[ignore]
+    #[test]
+    fn test_enum_look() {
+        let config = TestSettings {
+            xpdf_tools_folder: Some(PathBuf::from("dir/some")),
+            colors: vec![
+                TestConfigColorSpec {
+                    name: "test11".into(),
+                    fg: Some((12, 12, 12)),
+                    bg: None,
+                    styles: TestTextStyles {
+                        bold: true,
+                        underline: false,
+                    }
+                },
+                TestConfigColorSpec {
+                    name: "test2".into(),
+                    fg: None,
+                    bg: None,
+                    styles: TestTextStyles {
+                        bold: false,
+                        underline: false,
+                    }
+                },
+            ],
+        };
+        let mut toml = toml::to_string(&config).unwrap();
+        toml.insert_str(0, "# add a comment line\n");
+        println!("{:?}", toml);
+        let toml_path = PathBuf::from("./test_config.toml");
+        let mut save_file = File::create(&toml_path).unwrap();
+        save_file.write_all(toml.as_bytes()).unwrap();
+
+    }
 }

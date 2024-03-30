@@ -606,6 +606,7 @@ dependencies = [
  "serde",
  "termcolor",
  "toml",
+ "toml_edit",
  "walkdir",
  "xpdf_tools",
 ]

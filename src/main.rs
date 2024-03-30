@@ -9,14 +9,6 @@ use std::env;
 
 use std::result::Result;
 
-//use grep_utils::Settings;
-
-
-//use termcolor::{StandardStream, ColorChoice};
-//use walkdir::WalkDir;
-
-
-
 // mod xpdf_tools;
 mod grep_utils;
 mod utils;
@@ -34,7 +26,8 @@ use xpdf_tools::types::XpdfArgs;
 use xpdf_tools::XpdfTools;
 use xpdf_tools::{self};
 
-use crate::settings::{Actions, Settings};
+use crate::pdf_tools::{AvailablePdfTools, PdfDummyTool};
+use crate::settings::{Actions, Settings, ShortenLineMode};
 
 type BoxError = std::boxed::Box<dyn
 	std::error::Error   // must implement Error to satisfy ?
@@ -54,11 +47,21 @@ fn main() -> Result<(), BoxError>{
 
     //let mut settings = Settings::default();
     let mut settings = Settings::new();
-    let _tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
+    settings.shorten_line_mode = ShortenLineMode::Trim(150);
+    settings.tools = match settings.use_pdf_tool {
+        AvailablePdfTools::UseXpdfTools => {
+            let t = XpdfTools::builder(PathBuf::from(settings.xpdf_tools_folder.as_ref().unwrap())).unwrap()
                     .extra_args(vec![XpdfArgs::Encoding("UTF-8".into())])
-                    .build();    
+                    .build();
+            Box::new(XpdfWrapper {tools: t})
+        },
+        AvailablePdfTools::UsePdfDummyTool => Box::new(PdfDummyTool {}),
+    };
+    // let _tools = XpdfTools::builder(PathBuf::from("./tools/xpdf-tools-win-4.05/bin64/")).unwrap()
+    //                 .extra_args(vec![XpdfArgs::Encoding("UTF-8".into())])
+    //                 .build();    
 
-    settings.tools = Box::new(XpdfWrapper {tools: _tools});
+    // settings.tools = Box::new(XpdfWrapper {tools: _tools});
     // let cli = Cli::parse();
     let cli = settings.cli.as_ref().unwrap();
     match cli.command { 
@@ -72,9 +75,10 @@ fn main() -> Result<(), BoxError>{
         Actions::Test => { println!("Action: test");},
         Actions::Search {ref pattern}=> {
             if let Some(dir) = cli.directory.as_deref() {
-                pdf_tools::search_dir(dir, pattern, &settings);
+                pdf_tools::search_dir(dir, pattern, &settings)?;
             } else if let Some(file) = cli.file.as_deref() {
-                pdf_tools::search_file(&file, pattern, &settings);
+                // pdf_tools::search_file(&file, pattern, &settings);
+                settings.tools.search_file(file, pattern, &settings)?;
             } 
             //println!("Action: search:{}", *pattern);
         },
@@ -246,7 +250,8 @@ fn test_folder_mode() {
 
     start = Instant::now();
     _file_list.par_iter().for_each(|(_dir, file)| {
-        pdf_tools::search_invoke_file(String::from(file), &pattern, &_settings);
+        //pdf_tools::search_invoke_file(String::from(file), &pattern, &_settings);
+       _settings.tools.search_file(Path::new(&file), &pattern, &_settings).unwrap();
     });
 
     let elapsed2 = start.elapsed();
