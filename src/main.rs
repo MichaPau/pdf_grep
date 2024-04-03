@@ -11,6 +11,7 @@ use std::result::Result;
 
 // mod xpdf_tools;
 mod grep_utils;
+// mod grep_utils2;
 mod utils;
 mod settings;
 mod pdf_tools;
@@ -47,7 +48,7 @@ fn main() -> Result<(), BoxError>{
 
     //let mut settings = Settings::default();
     let mut settings = Settings::new();
-    settings.shorten_line_mode = ShortenLineMode::Trim(150);
+    settings.shorten_line_mode = ShortenLineMode::Trim(25);
     settings.tools = match settings.use_pdf_tool {
         AvailablePdfTools::UseXpdfTools => {
             let t = XpdfTools::builder(PathBuf::from(settings.xpdf_tools_folder.as_ref().unwrap())).unwrap()

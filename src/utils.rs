@@ -39,6 +39,16 @@ pub fn get_folder_files(dir_path: &Path) -> Vec<(String, String)> {
     list
 }
 
+pub fn get_left_index_trim(line: &str, left_pos: usize, trim_value: usize) -> usize {
+    let trim_start_left  = left_pos.saturating_sub(trim_value);
+    let left_index = line.as_bytes().iter().collect::<Vec<_>>().iter().enumerate().rposition(|(i, c)| c.is_ascii_whitespace() && i < trim_start_left).unwrap_or(0);
+    left_index+1
+}
+pub fn get_right_index_trim(line: &str, right_pos: usize, trim_value: usize) -> usize {
+    let trim_start_right = std::cmp::min(right_pos - 1 + trim_value, line.len() - 1);
+    let right_index = line.as_bytes().iter().enumerate().position(|(i, c)| c.is_ascii_whitespace() && i >= trim_start_right).unwrap_or(line.len() - 1);
+    right_index
+}
 pub fn _dump<I, K, V, A>(iter: I) 
     where 
         I: IntoIterator<Item = (K, V)>, 
