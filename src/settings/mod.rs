@@ -34,6 +34,7 @@ pub enum Actions {
     Info,
     Test,
     Text,
+    Rand { length: Option<usize> },
 
 }
 #[derive(PartialEq, Debug, Serialize, Deserialize)]
@@ -145,18 +146,17 @@ impl Settings {
     //     spec
     // }
     //impl std::io::Write + WriteColor
+    #[allow(dead_code)]
     pub fn create_color_writer(&self) -> impl std::io::Write + WriteColor {
-        //let color_choice = if std::io::stdin().is_terminal() { ColorChoice::Auto} else { ColorChoice::Never};
-        //let stream = StandardStream::stdout(self.color_choice);
         let stream = BufferedStandardStream::stdout(self.color_choice);
         stream
     }
-
+    #[allow(dead_code)]
     pub fn create_writer(&self) -> impl std::io::Write {
-        //let color_choice = if std::io::stdin().is_terminal() { ColorChoice::Auto} else { ColorChoice::Never};
         let stream = BufferedStandardStream::stdout(self.color_choice);
         stream
     }
+    
     pub fn create_printer(&self) -> Standard<BufferedStandardStream>{
         // let match_spec_color: UserColorSpec = "match:fg:255,197,12".parse().unwrap();
         // let line_spec_color: UserColorSpec = "line:fg:1,246,238".parse().unwrap();

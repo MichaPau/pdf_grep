@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, io:: Write, path::Path};
 use core::fmt::Debug;
 
 use grep::regex::RegexMatcher;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use xpdf_tools::{PdfError, XpdfTools};
 
@@ -21,7 +22,7 @@ pub trait PDFTools: std::fmt::Debug {
 
     fn pdf_info(&self, file_path: &Path) -> Result<BTreeMap<String, Option<String>>, BoxError>;
     fn pdf_text(&self, file_path: &Path) -> Result<Vec<u8>, BoxError>;
-    fn search_file(&self, file: &Path, pattern: &String, settings: &Settings) -> Result<(), BoxError>;
+    fn search_file(&self, file: &Path, pattern: &str, settings: &Settings) -> Result<(), BoxError>;
 }
 
 // impl Debug for dyn PDFTools + std::marker::Send + std::marker::Sync {
@@ -73,15 +74,15 @@ impl PDFTools for XpdfWrapper {
         }
     }
 
-    fn search_file(&self, file: &Path, pattern: &String, settings: &Settings) -> Result<(), BoxError> {
+    fn search_file(&self, file: &Path, pattern: &str, settings: &Settings) -> Result<(), BoxError> {
         
         let mut printer = settings.create_printer();
-        let file_path = &file;
+        //let file_path = file;
         
-        match settings.tools.pdf_text(&file_path) {
+        match settings.tools.pdf_text(file) {
             Ok(content) => {
 
-                let file_header = format!("Searching: {}\n", file_path.display());
+                let file_header = format!("Searching: {}\n", file.display());
                 let p = printer.get_mut();
                 p.set_color(&settings.info_color_spec).unwrap();
                 p.write_all(file_header.as_bytes()).unwrap();
@@ -90,12 +91,11 @@ impl PDFTools for XpdfWrapper {
                 let matcher = RegexMatcher::new(s.as_str())?;
                 
                 let mut total = 0;
-                for (page, split) in String::from_utf8_lossy(&content).split("\u{c}").enumerate() {
+                for (page, split) in String::from_utf8_lossy(&content).split('\u{c}').enumerate() {
                     let search_result = grep_utils::search_pdf_page(&matcher, &mut printer, split.as_bytes(), page, settings);
                     match search_result {
                         Ok(count) => {
                             total += count;
-                            ()
                         },
                         Err(e) => eprint!("{}", e),
                     }
@@ -112,12 +112,12 @@ impl PDFTools for XpdfWrapper {
                 let mut stderr = BufferedStandardStream::stderr(termcolor::ColorChoice::Auto);
                 stderr.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
                 if let Some(pdf_error) = e.downcast_ref::<PdfError>() {
-                    stderr.write(pdf_error.message.as_bytes()).unwrap();
-                    stderr.write(b"\n").unwrap();
-                    stderr.write(pdf_error.process_message.as_bytes()).unwrap();
+                    stderr.write_all(pdf_error.message.as_bytes()).unwrap();
+                    stderr.write_all(b"\n").unwrap();
+                    stderr.write_all(pdf_error.process_message.as_bytes()).unwrap();
                     
                 } else {
-                    stderr.write(e.to_string().as_bytes()).unwrap();
+                    stderr.write_all(e.to_string().as_bytes()).unwrap();
                 }
                 stderr.flush().unwrap();
                 stderr.reset().unwrap();
@@ -144,7 +144,7 @@ impl PDFTools for PdfDummyTool {
         Ok(text)
     }
 
-    fn search_file(&self, _file: &Path, _pattern: &String, _settings: &Settings) -> Result<(), BoxError> {
+    fn search_file(&self, _file: &Path, _pattern: &str, _settings: &Settings) -> Result<(), BoxError> {
         unimplemented!();
     }
 }
@@ -164,24 +164,47 @@ pub fn get_info_dir(dir_path: &Path) {
 }
 
 
-pub fn search_dir(dir_path: &Path, pattern: &String, settings: &Settings) -> Result<(), BoxError>{
+pub fn search_dir(dir_path: &Path, pattern: &str, settings: &Settings) -> Result<(), BoxError> {
    
     if settings.folder_search_mode == FolderSearchMode::ThreadPerFolder {
         let pdf_map = utils::get_folder_tree(dir_path);
 
         pdf_map.par_iter().for_each(|(_, list)| {
             for file in list {
-                settings.tools.search_file(Path::new(&file), &pattern, &settings).unwrap_or_else(|e| eprintln!("{e}"))
+                settings.tools.search_file(Path::new(file), pattern, settings).unwrap_or_else(|e| eprintln!("{e}"))
             }
          });
     } else if settings.folder_search_mode == FolderSearchMode::ThreadPerFile {
         let pdf_files = utils::get_folder_files(dir_path);
         
         pdf_files.par_iter().for_each(|(_dir, file)| {
-            settings.tools.search_file(Path::new(&file), &pattern, &settings).unwrap_or_else(|e| eprintln!("{e}"))
+            settings.tools.search_file(Path::new(file), pattern, settings).unwrap_or_else(|e| eprintln!("{e}"))
         });
     }
     Ok(())
+}
+
+pub fn get_random_text(dir_path: &Path, settings: &Settings, snippet_length: usize) -> Result<(String, String), BoxError> {
+    
+    let mut rng = rand::thread_rng();
+    let pdf_files = utils::get_folder_files(dir_path);
+
+    let file_index = rng.gen_range(0..pdf_files.len());
+    let file = Path::new(&pdf_files[file_index].1);
+    let text = settings.tools.pdf_text(file)?;
+
+    if text.len() < snippet_length {
+        let slice = String::from_utf8_lossy(text.as_slice()).to_string();
+        Ok((file.display().to_string(), slice))
+    } else {
+        let start = rng.gen_range(0..text.len() - snippet_length -1);
+        let slice = &text[start..start+snippet_length];
+        let result = String::from_utf8_lossy(slice).to_string();
+        Ok((file.display().to_string(), result))
+    }
+    
+
+
 }
 
 

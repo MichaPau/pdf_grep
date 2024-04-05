@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+//#![allow(dead_code)]
 //#![allow(unused_imports)]
 
 //use std::collections::BTreeMap;
@@ -70,7 +70,7 @@ fn main() -> Result<(), BoxError>{
             if let Some(dir) = cli.directory.as_deref() {
                 pdf_tools::get_info_dir(dir);
             } else if let Some(file) = cli.file.as_deref() {
-                pdf_tools::get_info_file(&file, &settings);
+                pdf_tools::get_info_file(file, &settings);
             }
         },
         Actions::Test => { println!("Action: test");},
@@ -96,13 +96,24 @@ fn main() -> Result<(), BoxError>{
                         //io::stdout().write_all(content.as_bytes()).unwrap();
                     },
                     Err(e) => {
-                        io::stderr().write(e.message.as_bytes()).unwrap();
-                        io::stderr().write(b"\n").unwrap();
-                        io::stderr().write(e.process_message.as_bytes()).unwrap();
+                        io::stderr().write_all(e.message.as_bytes()).unwrap();
+                        io::stderr().write_all(b"\n").unwrap();
+                        io::stderr().write_all(e.process_message.as_bytes()).unwrap();
                         io::stderr().flush().unwrap();
                     },
                 }
             } 
+        },
+        Actions::Rand {ref length} => {
+            let mut snippet_length = 150;
+            if let Some(l) = length {
+                snippet_length = *l;
+            }
+            if let Some(dir) = cli.directory.as_deref() {
+                let result = pdf_tools::get_random_text(dir, &settings, snippet_length)?;
+                println!("{}", result.0);
+                println!("{}", result.1);
+            }
         }
 
     }
@@ -112,11 +123,7 @@ fn main() -> Result<(), BoxError>{
    Ok(())
     
 }
-fn print_result(result: &[(u64, String)]) {
-    for item in result {
-        println!("{:?}", item);
-    }
-}
+
 
 #[ignore]
 #[test]
