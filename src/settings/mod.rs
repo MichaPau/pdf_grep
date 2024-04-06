@@ -179,6 +179,7 @@ impl Settings {
         printer
     }
 
+    #[allow(dead_code)]
     pub fn create_summary_printer(&self) -> Summary<BufferedStandardStream> {
         let printer = SummaryBuilder::new()
             .stats(true)
@@ -187,6 +188,8 @@ impl Settings {
 
         printer
     }
+
+    #[allow(dead_code)]
     pub fn create_searcher() -> Searcher {
         let searcher = SearcherBuilder::new()
             .binary_detection(BinaryDetection::quit(b'\x00'))

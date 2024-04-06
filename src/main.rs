@@ -111,7 +111,7 @@ fn main() -> Result<(), BoxError>{
             }
             if let Some(dir) = cli.directory.as_deref() {
                 let result = pdf_tools::get_random_text(dir, &settings, snippet_length)?;
-                println!("{}", result.0);
+                println!("{:?}", result.0);
                 println!("{}", result.1);
             }
         }

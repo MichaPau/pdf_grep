@@ -22,6 +22,7 @@ pub trait PDFTools: std::fmt::Debug {
 
     fn pdf_info(&self, file_path: &Path) -> Result<BTreeMap<String, Option<String>>, BoxError>;
     fn pdf_text(&self, file_path: &Path) -> Result<Vec<u8>, BoxError>;
+    fn split_pages<'a>(&self, text: &'a str) -> Result<Vec<&'a str>, BoxError>;
     fn search_file(&self, file: &Path, pattern: &str, settings: &Settings) -> Result<(), BoxError>;
 }
 
@@ -74,6 +75,9 @@ impl PDFTools for XpdfWrapper {
         }
     }
 
+    fn split_pages<'a>(&self, text: &'a str) -> Result<Vec<&'a str>, BoxError> {
+        Ok(text.split('\u{c}').collect::<Vec<_>>())
+    }
     fn search_file(&self, file: &Path, pattern: &str, settings: &Settings) -> Result<(), BoxError> {
         
         let mut printer = settings.create_printer();
@@ -144,6 +148,9 @@ impl PDFTools for PdfDummyTool {
         Ok(text)
     }
 
+    fn split_pages<'a>(&self, _text: &'a str) -> Result<Vec<&'a str>, BoxError> {
+        unimplemented!();
+    }
     fn search_file(&self, _file: &Path, _pattern: &str, _settings: &Settings) -> Result<(), BoxError> {
         unimplemented!();
     }
@@ -184,7 +191,7 @@ pub fn search_dir(dir_path: &Path, pattern: &str, settings: &Settings) -> Result
     Ok(())
 }
 
-pub fn get_random_text(dir_path: &Path, settings: &Settings, snippet_length: usize) -> Result<(String, String), BoxError> {
+pub fn get_random_text(dir_path: &Path, settings: &Settings, snippet_length: usize) -> Result<(Vec<String>, String), BoxError> {
     
     let mut rng = rand::thread_rng();
     let pdf_files = utils::get_folder_files(dir_path);
@@ -195,18 +202,38 @@ pub fn get_random_text(dir_path: &Path, settings: &Settings, snippet_length: usi
 
     if text.len() < snippet_length {
         let slice = String::from_utf8_lossy(text.as_slice()).to_string();
-        Ok((file.display().to_string(), slice))
+        
+        Ok((vec![file.display().to_string()], slice))
     } else {
-        let start = rng.gen_range(0..text.len() - snippet_length -1);
-        let slice = &text[start..start+snippet_length];
-        let result = String::from_utf8_lossy(slice).to_string();
-        Ok((file.display().to_string(), result))
+        let text_str = String::from_utf8_lossy(text.as_slice()).to_string();
+        let pages = settings.tools.split_pages(&text_str)?;
+        let page_index = rng.gen_range(0..pages.len());
+        let page_text = pages[page_index];
+        let start = rng.gen_range(0..page_text.len() - snippet_length -1);
+        
+        let left_index = utils::get_left_index_trim(&page_text, start, 1);
+        let right_index = utils::get_right_index_trim(&page_text, start+snippet_length, 1);
+        let slice = &page_text[left_index..right_index];
+
+        let meta = vec![file.display().to_string(), format!("Page: {}", page_index), format!("range: {left_index}-{right_index}")];
+        //let slice = &text[start..start+snippet_length];
+        //let result = String::from_utf8_lossy(slice).to_string();
+        Ok((meta, slice.to_string()))
     }
     
 
 
 }
 
+#[test]
+fn test_s_len() {
+    let sparkle_heart_vec = vec![240, 159, 146, 150];
+
+    let sparkle_heart = String::from_utf8_lossy(&sparkle_heart_vec);
+
+    println!("vec.len:{}, String len:{}", sparkle_heart_vec.len(), sparkle_heart.len());
+    assert_eq!(sparkle_heart_vec.len(), sparkle_heart.len());
+}
 
 // pub fn search_file(file_path: &Path, pattern: &String, settings: &Settings) {
    
